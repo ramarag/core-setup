@@ -139,9 +139,9 @@ namespace Microsoft.DotNet.Cli.Build
             PublishMutationUtilties.CleanPublishOutput(
                 sharedFrameworkNameAndVersionRoot,
                 "framework",
+                new string[] { "framework", "apphost", "hostfxr", "dotnet" },
                 deleteRuntimeConfigJson: true,
-                deleteDepsJson: false,
-                deleteAppHost: true);
+                deleteDepsJson: false);
 
             // Rename the .deps file
             var destinationDeps = Path.Combine(sharedFrameworkNameAndVersionRoot, $"{s_sharedFrameworkName}.deps.json");
@@ -149,9 +149,7 @@ namespace Microsoft.DotNet.Cli.Build
             PublishMutationUtilties.ChangeEntryPointLibraryName(destinationDeps, null);
 
             // Generate RID fallback graph
-            GenerateRuntimeGraph(dotnetCli, destinationDeps);
-
-            CopyHostArtifactsToSharedFramework(sharedFrameworkNameAndVersionRoot, hostFxrVersion);
+            GenerateRuntimeGraph(dotnetCli, destinationDeps, new List<string> { "microsoft.netcore.dotnetapphost", "microsoft.netcore.dotnethostresolver" });
 
             _crossgenUtil.CrossgenDirectory(sharedFrameworkNameAndVersionRoot, sharedFrameworkNameAndVersionRoot);
 
@@ -198,7 +196,7 @@ namespace Microsoft.DotNet.Cli.Build
             return;
         }
 
-        private void GenerateRuntimeGraph(DotNetCli dotnetCli, string destinationDeps)
+        private void GenerateRuntimeGraph(DotNetCli dotnetCli, string destinationDeps, IReadOnlyList<string> packagesToBeRemoved)
         {
             string runtimeGraphGeneratorRuntime = null;
             switch (RuntimeEnvironment.OperatingSystemPlatform)
@@ -224,7 +222,15 @@ namespace Microsoft.DotNet.Cli.Build
                     runtimeGraphGeneratorProject).Execute().EnsureSuccessful();
                 var runtimeGraphGeneratorExe = Path.Combine(runtimeGraphGeneratorOutput, $"{runtimeGraphGeneratorName}{Constants.ExeSuffix}");
 
-                Cmd(runtimeGraphGeneratorExe, "--project", _sharedFrameworkSourceRoot, "--deps", destinationDeps, runtimeGraphGeneratorRuntime)
+                var args = new List<string>() { "--project", _sharedFrameworkSourceRoot, "--deps", destinationDeps, runtimeGraphGeneratorRuntime};
+
+                foreach (var pkg in packagesToBeRemoved)
+                {
+                    args.Add("--remove");
+                    args.Add(pkg);
+                }
+
+                Cmd(runtimeGraphGeneratorExe, args.ToArray())
                     .Execute()
                     .EnsureSuccessful();
             }
@@ -232,22 +238,6 @@ namespace Microsoft.DotNet.Cli.Build
             {
                 throw new Exception($"Could not determine rid graph generation runtime for platform {RuntimeEnvironment.OperatingSystemPlatform}");
             }
-        }
-
-        private void CopyHostArtifactsToSharedFramework(string sharedFrameworkNameAndVersionRoot, string hostFxrVersion)
-        {
-            File.Copy(
-                Path.Combine(_corehostLockedDirectory, HostArtifactNames.DotnetHostBaseName),
-                Path.Combine(sharedFrameworkNameAndVersionRoot, HostArtifactNames.DotnetHostBaseName), true);
-            File.Copy(
-               Path.Combine(_corehostLockedDirectory, HostArtifactNames.DotnetHostFxrBaseName),
-               Path.Combine(sharedFrameworkNameAndVersionRoot, HostArtifactNames.DotnetHostFxrBaseName), true);
-
-            // Hostpolicy should be the latest and not the locked version as it is supposed to evolve for
-            // the framework and has a tight coupling with coreclr's API in the framework.
-            File.Copy(
-                Path.Combine(_corehostLatestDirectory, HostArtifactNames.HostPolicyBaseName),
-                Path.Combine(sharedFrameworkNameAndVersionRoot, HostArtifactNames.HostPolicyBaseName), true);
         }
 
         private string GenerateSharedFrameworkProject(

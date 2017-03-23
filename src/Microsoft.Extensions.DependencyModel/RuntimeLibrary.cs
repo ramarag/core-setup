@@ -72,6 +72,55 @@ namespace Microsoft.Extensions.DependencyModel
             NativeLibraries = new string[0];
         }
 
+        public static IList<RuntimeLibrary> RemoveReferences(IReadOnlyList<RuntimeLibrary> runtimeLibraries, IList<string> refname)
+        {
+            List<RuntimeLibrary> result = new List<RuntimeLibrary>();
+
+            foreach (var runtimeLib in runtimeLibraries)
+            {
+                
+                if (!string.IsNullOrEmpty(refname.First(elem => runtimeLib.Name.Contains(elem))))
+                {
+                    continue;
+                }
+                List<Dependency> toRemoveDependecy = new List<Dependency>();
+                foreach (var dependency in runtimeLib.Dependencies)
+                {
+                    if (!string.IsNullOrEmpty(refname.First(elem => dependency.Name.Contains(elem))))
+                    {
+                        toRemoveDependecy.Add(dependency);
+                    }
+                }
+
+                if (toRemoveDependecy.Count() > 0)
+                {
+                    List<Dependency> modifiedDependencies = new List<Dependency>();
+                    foreach (var dependency in runtimeLib.Dependencies)
+                    {
+                        if (!toRemoveDependecy.Contains(dependency))
+                        {
+                            modifiedDependencies.Add(dependency);
+                        }
+                    }
+
+                    result.Add(new RuntimeLibrary(runtimeLib.Type, 
+                                                  runtimeLib.Name, 
+                                                  runtimeLib.Version,
+                                                  runtimeLib.Hash,
+                                                  runtimeLib.RuntimeAssemblyGroups,
+                                                  runtimeLib.NativeLibraryGroups,
+                                                  runtimeLib.ResourceAssemblies,
+                                                  modifiedDependencies,
+                                                  runtimeLib.Serviceable));
+                }
+                else
+                {
+                    result.Add(runtimeLib);
+                }
+            }
+                return result;
+        }
+
         // Temporary (legacy) properties: https://github.com/dotnet/cli/issues/1998
         public IReadOnlyList<RuntimeAssembly> Assemblies { get; }
         public IReadOnlyList<string> NativeLibraries { get; }

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.CommandLine;
 using System.IO;
+using System.Linq;
 using Microsoft.DotNet.Cli.Utils;
 using Microsoft.DotNet.ProjectModel;
 using Microsoft.DotNet.ProjectModel.Graph;
@@ -15,6 +16,55 @@ namespace RuntimeGraphGenerator
 {
     public class Program
     {
+        public static List<RuntimeLibrary> RemoveReferences(IReadOnlyList<RuntimeLibrary> runtimeLibraries, IReadOnlyList<string> refname)
+        {
+            List<RuntimeLibrary> result = new List<RuntimeLibrary>();
+
+            foreach (var runtimeLib in runtimeLibraries)
+            {
+                if (string.IsNullOrEmpty(refname.FirstOrDefault(elem => runtimeLib.Name.ToLower().Contains(elem))))
+                {
+                    List<Dependency> toRemoveDependecy = new List<Dependency>();
+                    foreach (var dependency in runtimeLib.Dependencies)
+                    {
+                        if (!string.IsNullOrEmpty(refname.FirstOrDefault(elem => dependency.Name.ToLower().Contains(elem))))
+                        {
+                            toRemoveDependecy.Add(dependency);
+                        }
+                    }
+
+                    if (toRemoveDependecy.Count > 0)
+                    {
+                        List<Dependency> modifiedDependencies = new List<Dependency>();
+                        foreach (var dependency in runtimeLib.Dependencies)
+                        {
+                            if (!toRemoveDependecy.Contains(dependency))
+                            {
+                                modifiedDependencies.Add(dependency);
+                            }
+                        }
+
+
+                        result.Add(new RuntimeLibrary(runtimeLib.Type,
+                                                      runtimeLib.Name,
+                                                      runtimeLib.Version,
+                                                      runtimeLib.Hash,
+                                                      runtimeLib.RuntimeAssemblyGroups,
+                                                      runtimeLib.NativeLibraryGroups,
+                                                      runtimeLib.ResourceAssemblies,
+                                                      modifiedDependencies,
+                                                      runtimeLib.Serviceable));
+
+                    }
+                    else if (string.IsNullOrEmpty(refname.FirstOrDefault(elem => runtimeLib.Name.ToLower().Contains(elem))))
+                    {
+                        result.Add(runtimeLib);
+                    }
+                }
+            }
+            return result;
+        }
+
         public static int Main(string[] args)
         {
             DebugHelper.HandleDebugSwitch(ref args);
@@ -22,6 +72,7 @@ namespace RuntimeGraphGenerator
             string projectDirectory = null;
             string depsFile = null;
             IReadOnlyList<string> runtimes = null;
+            IReadOnlyList<string> runtimepackagesToBeRemoved = null;
             try
             {
                 ArgumentSyntax.Parse(args, syntax =>
@@ -33,6 +84,7 @@ namespace RuntimeGraphGenerator
 
                     syntax.DefineOption("p|project", ref projectDirectory, "Project location");
                     syntax.DefineOption("d|deps", ref depsFile, "Deps file path");
+                    syntax.DefineOptionList("r|remove", ref runtimepackagesToBeRemoved, "Runtime packages to be removed");
 
                     syntax.DefineParameterList("runtimes", ref runtimes, "Runtimes");
                 });
@@ -75,11 +127,19 @@ namespace RuntimeGraphGenerator
                 var graph = manager.Collect(exporter.GetDependencies(LibraryType.Package));
                 var expandedGraph = manager.Expand(graph, runtimes);
 
+                var trimmedRuntimeLibraries = context.RuntimeLibraries;
+
+                if (runtimepackagesToBeRemoved != null && runtimepackagesToBeRemoved.Count > 0)
+                {
+                    runtimepackagesToBeRemoved = runtimepackagesToBeRemoved.Select(x => x.ToLower()).ToList(); ;
+                    trimmedRuntimeLibraries = RemoveReferences(context.RuntimeLibraries, runtimepackagesToBeRemoved);
+                }
+
                 context = new DependencyContext(
                     context.Target,
                     context.CompilationOptions,
                     context.CompileLibraries,
-                    context.RuntimeLibraries,
+                    trimmedRuntimeLibraries,
                     expandedGraph
                     );
 

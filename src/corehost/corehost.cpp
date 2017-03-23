@@ -126,12 +126,12 @@ pal::string_t resolve_fxr_path(const pal::string_t& own_dir)
             return ret_path;
         }
     }
-    // TODO: Issue #215 Do not allow dotnet to load hostfxr side-by-side.
+    
     pal::string_t fxr_path;
     if (library_exists_in_dir(own_dir, LIBFXR_NAME, &fxr_path))
     {
-        trace::info(_X("Resolved fxr [%s]..."), fxr_path.c_str());
-        return fxr_path;
+		trace::info(_X("Resolved fxr [%s]..."), fxr_path.c_str());
+		trace::error(_X("A fatal error was encountered. This executable was not bound to load a managed DLL"));
     }
     return pal::string_t();
 #endif
