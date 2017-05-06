@@ -42,7 +42,7 @@ struct probe_config_t
     {
     }
 
-    bool is_lookup()
+    bool is_lookup() const
     {
         return (probe_deps_json == nullptr) &&
             !only_runtime_assets &&
