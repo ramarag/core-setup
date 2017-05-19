@@ -211,7 +211,9 @@ namespace pal
     bool getenv(const char_t* name, string_t* recv);
     bool get_default_servicing_directory(string_t* recv);
     bool get_local_dotnet_dir(string_t* recv);
-    bool get_global_dotnet_dir(string_t* recv);
+    //As long as linux uses the path to find the global location of 
+    //dotnet, multiple locations are possible
+    bool get_global_dotnet_dirs(std::vector<pal::string_t>* recv);
     bool get_default_breadcrumb_store(string_t* recv);
     bool is_path_rooted(const string_t& path);
 
