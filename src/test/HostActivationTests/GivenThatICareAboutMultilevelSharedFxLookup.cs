@@ -14,13 +14,16 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
         private string _currentWorkingDir;
         private string _userDir;
         private string _executableDir;
+        private string _globalDir;
         private string _cwdSharedFxBaseDir;
         private string _userSharedFxBaseDir;
         private string _exeSharedFxBaseDir;
+        private string _globalSharedFxBaseDir;
         private string _builtSharedFxDir;
         private string _cwdSelectedMessage;
         private string _userSelectedMessage;
         private string _exeSelectedMessage;
+        private string _globalSelectedMessage;
         private string _sharedFxVersion;
 
         public GivenThatICareAboutMultilevelSharedFxLookup()
@@ -41,6 +44,7 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             _currentWorkingDir = Path.Combine(multilevelDir, "cwd");
             _userDir = Path.Combine(multilevelDir, "user");
             _executableDir = Path.Combine(multilevelDir, "exe");
+            _globalDir = Path.Combine(multilevelDir, "global");
 
             RepoDirectories = new RepoDirectoriesProvider(builtDotnet: _executableDir);
 
@@ -48,11 +52,13 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             _cwdSharedFxBaseDir = Path.Combine(_currentWorkingDir, "shared", "Microsoft.NETCore.App");
             _userSharedFxBaseDir = Path.Combine(_userDir, ".dotnet", RepoDirectories.BuildArchitecture, "shared", "Microsoft.NETCore.App");
             _exeSharedFxBaseDir = Path.Combine(_executableDir, "shared", "Microsoft.NETCore.App");
+            _globalSharedFxBaseDir = Path.Combine(_globalDir, "shared", "Microsoft.NETCore.App");
 
             // Create directories. It's necessary to copy the entire publish folder to the exe dir because
             // we'll need to build from it. The CopyDirectory method automatically creates the dest dir
             Directory.CreateDirectory(_cwdSharedFxBaseDir);
             Directory.CreateDirectory(_userSharedFxBaseDir);
+            Directory.CreateDirectory(_globalSharedFxBaseDir);
             CopyDirectory(builtDotnet, _executableDir);
 
             // Restore and build SharedFxLookupPortableApp from exe dir
@@ -73,6 +79,7 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             _cwdSelectedMessage = $"The expected {hostPolicyDllName} directory is [{_cwdSharedFxBaseDir}";
             _userSelectedMessage = $"The expected {hostPolicyDllName} directory is [{_userSharedFxBaseDir}";
             _exeSelectedMessage = $"The expected {hostPolicyDllName} directory is [{_exeSharedFxBaseDir}";
+            _globalSelectedMessage = $"The expected {hostPolicyDllName} directory is [{_globalSharedFxBaseDir}";
         }
 
         [Fact]
@@ -111,7 +118,7 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             AddAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.0.0");
 
             // Version: 9999.0.0
-            // User: 9999.0.0
+            // User: 9999.0.0 --> should not be picked
             // Exe: 9999.0.0
             // Expected: 9999.0.0 from user dir
             dotnet.Exec(appDll)
@@ -124,7 +131,7 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
                 .Should()
                 .Pass()
                 .And
-                .HaveStdErrContaining(_userSelectedMessage);
+                .HaveStdErrContaining(_exeSelectedMessage);
 
             // Add a dummy version in the cwd
             AddAvailableSharedFxVersions(_cwdSharedFxBaseDir, "9999.0.0");
@@ -133,7 +140,7 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             // CWD: 9999.0.0   --> should not be picked
             // User: 9999.0.0
             // Exe: 9999.0.0
-            // Expected: 9999.0.0 from user dir
+            // Expected: 9999.0.0 from user Exe
             dotnet.Exec(appDll)
                 .WorkingDirectory(_currentWorkingDir)
                 .EnvironmentVariable("COREHOST_TRACE", "1")
@@ -144,7 +151,7 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
                 .Should()
                 .Pass()
                 .And
-                .HaveStdErrContaining(_userSelectedMessage);
+                .HaveStdErrContaining(_exeSelectedMessage);
 
             // Remove dummy folders from user dir
             DeleteAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.0.0");
@@ -160,70 +167,102 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             var appDll = fixture.TestProject.AppDll;
 
             // Add some dummy versions
-            AddAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.0.2", "9999.0.0-dummy2");
-            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.0", "9999.0.0-dummy0");
+            AddAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.0.2", "9999.0.0-dummy2");
+            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.0");
 
             // Set desired version = 9999.0.0-dummy0
             string runtimeConfig = Path.Combine(fixture.TestProject.OutputDirectory, "SharedFxLookupPortableApp.runtimeconfig.json");
             SetRuntimeConfigJson(runtimeConfig, "9999.0.0-dummy0");
 
             // Version: 9999.0.0-dummy0
-            // User: 9999.0.2, 9999.0.0-dummy2
-            // Exe: 9999.0.0, 9999.0.0-dummy0
-            // Expected: 9999.0.0-dummy2 from user dir
+            // Exe: 9999.0.0
+            // global: 9999.0.2, 9999.0.0-dummy2
+            // Expected: 9999.0.0-dummy2 from global dir
             dotnet.Exec(appDll)
                 .WorkingDirectory(_currentWorkingDir)
                 .EnvironmentVariable("COREHOST_TRACE", "1")
-                .WithUserProfile(_userDir)
+                .WithGlobalLocation(_globalDir)
                 .CaptureStdOut()
                 .CaptureStdErr()
                 .Execute()
                 .Should()
                 .Pass()
                 .And
-                .HaveStdErrContaining(Path.Combine(_userSelectedMessage, "9999.0.0-dummy2"));
-
-            // Add a prerelease dummy version in userdir 
-            AddAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.0.0-dummy1");
+                .HaveStdErrContaining(Path.Combine(_globalSelectedMessage, "9999.0.0-dummy2"));
+            
+            AddAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.0.0-dummy1");
 
             // Version: 9999.0.0-dummy0
-            // User: 9999.0.2, 9999.0.0-dummy1, 9999.0.0-dummy2
-            // Exe: 9999.0.0, 9999.0.0-dummy0
-            // Expected: 9999.0.0-dummy1 from User
+            // Exe: 9999.0.0
+            // global: 9999.0.2, 9999.0.0-dummy1, 9999.0.0-dummy2
+            // Expected: 9999.0.0-dummy1 from global
             dotnet.Exec(appDll)
                 .WorkingDirectory(_currentWorkingDir)
                 .EnvironmentVariable("COREHOST_TRACE", "1")
-                .WithUserProfile(_userDir)
+                .WithGlobalLocation(_globalDir)
                 .CaptureStdOut()
                 .CaptureStdErr()
                 .Execute()
                 .Should()
                 .Pass()
                 .And
-                .HaveStdErrContaining(Path.Combine(_userSelectedMessage, "9999.0.0-dummy1"));
+                .HaveStdErrContaining(Path.Combine(_globalSelectedMessage, "9999.0.0-dummy1"));
 
-            // Set desired version = 9999.0.0
+            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.0-dummy0");
+
+            // Version: 9999.0.0-dummy0
+            // Exe: 9999.0.0, 9999.0.0-dummy0
+            // global: 9999.0.2, 9999.0.0-dummy1, 9999.0.0-dummy2
+            // Expected: 9999.0.0-dummy1 from global
+            dotnet.Exec(appDll)
+                .WorkingDirectory(_currentWorkingDir)
+                .EnvironmentVariable("COREHOST_TRACE", "1")
+                .WithGlobalLocation(_globalDir)
+                .CaptureStdOut()
+                .CaptureStdErr()
+                .Execute()
+                .Should()
+                .Pass()
+                .And
+                .HaveStdErrContaining(Path.Combine(_exeSelectedMessage, "9999.0.0-dummy0"));
+
             SetRuntimeConfigJson(runtimeConfig, "9999.0.0");
+            // Version: 9999.0.0
+            // Exe: 9999.0.0, 9999.0.0-dummy0
+            // global: 9999.0.2, 9999.0.0-dummy1, 9999.0.0-dummy2
+            // Expected: 9999.0.2 from global
+            dotnet.Exec(appDll)
+                .WorkingDirectory(_currentWorkingDir)
+                .EnvironmentVariable("COREHOST_TRACE", "1")
+                .WithGlobalLocation(_globalDir)
+                .CaptureStdOut()
+                .CaptureStdErr()
+                .Execute()
+                .Should()
+                .Pass()
+                .And
+                .HaveStdErrContaining(Path.Combine(_globalSelectedMessage, "9999.0.2"));
+
+           AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.3");
 
             // Version: 9999.0.0
-            // CWD: 9999.0.0-dummy1
-            // User: 9999.0.2, 9999.0.0-dummy2
-            // Exe: 9999.0.0, 9999.0.0-dummy0
-            // Expected: 9999.0.2 from user dir
+            // Exe: 9999.0.0, 9999.0.0-dummy0, 9999.0.3
+            // global: 9999.0.2, 9999.0.0-dummy1, 9999.0.0-dummy2
+            // Expected: 9999.0.0-dummy1 from global
             dotnet.Exec(appDll)
                 .WorkingDirectory(_currentWorkingDir)
                 .EnvironmentVariable("COREHOST_TRACE", "1")
-                .WithUserProfile(_userDir)
+                .WithGlobalLocation(_globalDir)
                 .CaptureStdOut()
                 .CaptureStdErr()
                 .Execute()
                 .Should()
                 .Pass()
                 .And
-                .HaveStdErrContaining(Path.Combine(_userSelectedMessage, "9999.0.2"));
+                .HaveStdErrContaining(Path.Combine(_exeSelectedMessage, "9999.0.3"));
 
-            // Remove dummy folders from user dir
-            DeleteAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.0.2", "9999.0.0-dummy2");
+            DeleteAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.0", "9999.0.0-dummy0","9999.0.3");
+            DeleteAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.0.2", "9999.0.0-dummy1", "9999.0.0-dummy2");
         }
 
         [Fact]
@@ -236,33 +275,33 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             var appDll = fixture.TestProject.AppDll;
 
             // Add some dummy versions
-            AddAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.0.2", "9999.0.0-dummy2");
-            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.0", "9999.0.3", "9999.0.0-dummy3");
+            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.2", "9999.0.0-dummy2");
+            AddAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.0.0", "9999.0.3", "9999.0.0-dummy3");
 
             // Version: 9999.0.0 (through --fx-version arg)
-            // User: 9999.0.2, 9999.0.0-dummy2
-            // Exe: 9999.0.0, 9999.0.3, 9999.0.0-dummy3
-            // Expected: 9999.0.0 from exe dir
+            // Exe: 9999.0.2, 9999.0.0-dummy2
+            // global: 9999.0.0, 9999.0.3, 9999.0.0-dummy3
+            // Expected: 9999.0.0 from global dir
             dotnet.Exec("--fx-version", "9999.0.0", appDll)
                 .WorkingDirectory(_currentWorkingDir)
                 .EnvironmentVariable("COREHOST_TRACE", "1")
-                .WithUserProfile(_userDir)
+                 .WithGlobalLocation(_globalDir)
                 .CaptureStdOut()
                 .CaptureStdErr()
                 .Execute()
                 .Should()
                 .Pass()
                 .And
-                .HaveStdErrContaining(Path.Combine(_exeSelectedMessage, "9999.0.0"));
+                .HaveStdErrContaining(Path.Combine(_globalSelectedMessage, "9999.0.0"));
 
             // Version: 9999.0.0-dummy1 (through --fx-version arg)
-            // User: 9999.0.2, 9999.0.0-dummy2
-            // Exe: 9999.0.0, 9999.0.3, 9999.0.0-dummy3
+            // Exe: 9999.0.2, 9999.0.0-dummy2
+            // global: 9999.0.0, 9999.0.3, 9999.0.0-dummy3
             // Expected: no compatible version
             dotnet.Exec("--fx-version", "9999.0.0-dummy1", appDll)
                 .WorkingDirectory(_currentWorkingDir)
                 .EnvironmentVariable("COREHOST_TRACE", "1")
-                .WithUserProfile(_userDir)
+                .WithGlobalLocation(_globalDir)
                 .CaptureStdOut()
                 .CaptureStdErr()
                 .Execute(fExpectedToFail:true)
@@ -271,8 +310,9 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
                 .And
                 .HaveStdErrContaining("It was not possible to find any compatible framework version");
 
-            // Remove dummy folders from user dir
-            DeleteAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.0.2", "9999.0.0-dummy2");
+            
+            DeleteAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.2", "9999.0.0-dummy2");
+            DeleteAvailableSharedFxVersions(_globalSharedFxBaseDir,"9999.0.0", "9999.0.3", "9999.0.0-dummy3");
         }
 
         [Fact]
@@ -297,7 +337,6 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             // Expected: 10000.1.3 from exe
             dotnet.Exec(appDll)
                 .WorkingDirectory(_currentWorkingDir)
-                .WithUserProfile(_userDir)
                 .EnvironmentVariable("DOTNET_ROLL_FORWARD_ON_NO_CANDIDATE_FX", "1")
                 .EnvironmentVariable("COREHOST_TRACE", "1")
                 .CaptureStdOut()
@@ -317,7 +356,6 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             // Expected: 9999.1.1 from exe
             dotnet.Exec(appDll)
                 .WorkingDirectory(_currentWorkingDir)
-                .WithUserProfile(_userDir)
                 .EnvironmentVariable("DOTNET_ROLL_FORWARD_ON_NO_CANDIDATE_FX", "1")
                 .EnvironmentVariable("COREHOST_TRACE", "1")
                 .CaptureStdOut()
@@ -351,7 +389,6 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             // Expected: no compatible version
             dotnet.Exec(appDll)
                 .WorkingDirectory(_currentWorkingDir)
-                .WithUserProfile(_userDir)
                 .EnvironmentVariable("DOTNET_ROLL_FORWARD_ON_NO_CANDIDATE_FX", "1")
                 .EnvironmentVariable("COREHOST_TRACE", "1")
                 .CaptureStdOut()
@@ -377,16 +414,37 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             SetRuntimeConfigJson(runtimeConfig, "9999.0.0");
 
             // Add a dummy version in the exe dir
-            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.1.0");
+            AddAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.1.0");
 
             // Version: 9999.0.0
             // 'Roll forward on no candidate fx' enabled through env var
-            // User: empty
-            // Exe: 9999.1.0
-            // Expected: 9999.1.0 from exe dir
+            // Exe: empty
+            // Global: 9999.1.0
+            // Expected: 9999.1.0 from global dir
             dotnet.Exec(appDll)
                 .WorkingDirectory(_currentWorkingDir)
-                .WithUserProfile(_userDir)
+                .WithGlobalLocation(_globalDir)
+                .EnvironmentVariable("DOTNET_ROLL_FORWARD_ON_NO_CANDIDATE_FX", "1")
+                .EnvironmentVariable("COREHOST_TRACE", "1")
+                .CaptureStdOut()
+                .CaptureStdErr()
+                .Execute()
+                .Should()
+                .Pass()
+                .And
+                .HaveStdErrContaining(_globalSelectedMessage);
+
+            // Add a dummy version in the user dir
+            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.1.1");
+
+            // Version: 9999.0.0
+            // 'Roll forward on no candidate fx' enabled through env var
+            // Exe: 9999.1.1
+            // Global: 9999.1.0
+            // Expected: 9999.1.1 from exe dir
+            dotnet.Exec(appDll)
+                .WorkingDirectory(_currentWorkingDir)
+                .WithGlobalLocation(_globalDir)
                 .EnvironmentVariable("DOTNET_ROLL_FORWARD_ON_NO_CANDIDATE_FX", "1")
                 .EnvironmentVariable("COREHOST_TRACE", "1")
                 .CaptureStdOut()
@@ -397,29 +455,9 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
                 .And
                 .HaveStdErrContaining(_exeSelectedMessage);
 
-            // Add a dummy version in the user dir
-            AddAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.1.1");
-
-            // Version: 9999.0.0
-            // 'Roll forward on no candidate fx' enabled through env var
-            // User: 9999.1.1
-            // Exe: 9999.1.0
-            // Expected: 9999.1.1 from user dir
-            dotnet.Exec(appDll)
-                .WorkingDirectory(_currentWorkingDir)
-                .WithUserProfile(_userDir)
-                .EnvironmentVariable("DOTNET_ROLL_FORWARD_ON_NO_CANDIDATE_FX", "1")
-                .EnvironmentVariable("COREHOST_TRACE", "1")
-                .CaptureStdOut()
-                .CaptureStdErr()
-                .Execute()
-                .Should()
-                .Pass()
-                .And
-                .HaveStdErrContaining(_userSelectedMessage);
-
             // Remove dummy folders from user dir
-            DeleteAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.1.1");
+            DeleteAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.1.1");
+             DeleteAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.1.0");
         }
 
         [Fact]
@@ -437,8 +475,8 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             SetRuntimeConfigJson(runtimeConfig, "9999.0.0", 1);
 
             // Add some dummy versions
-            AddAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.1.0");
-            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.0");
+            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.1.0");
+            AddAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.0.0");
 
             // Set desired version = 9999.0.0
             // Disable 'roll forward on no candidate fx' through runtimeconfig
@@ -447,12 +485,12 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
 
             // Version: 9999.0.0
             // 'Roll forward on no candidate fx' disabled through runtimeconfig
-            // User: 9999.1.0
-            // Exe: 9999.0.0
-            // Expected: 9999.0.0 from exe dir
+            // Exe: 9999.1.0
+            // Global: 9999.0.0
+            // Expected: 9999.0.0 from global dir
             dotnet.Exec(appDll)
                 .WorkingDirectory(_currentWorkingDir)
-                .WithUserProfile(_userDir)
+                .WithGlobalLocation(_globalDir)
                 .EnvironmentVariable("DOTNET_ROLL_FORWARD_ON_NO_CANDIDATE_FX", "1")
                 .EnvironmentVariable("COREHOST_TRACE", "1")
                 .CaptureStdOut()
@@ -479,39 +517,17 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
             SetRuntimeConfigJson(runtimeConfig, "9999.0.0", 0);
 
             // Add some dummy versions
-            AddAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.1.0");
-            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.0");
+            AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.1.0");
+            AddAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.0.0");
 
             // Version: 9999.0.0
             // 'Roll forward on no candidate fx' enabled through argument
-            // User: 9999.1.0
-            // Exe: 9999.0.0
-            // Expected: 9999.1.0 from User
+            // Exe: 9999.1.0
+            // Global: 9999.0.0
+            // Expected: 9999.1.0 from Exe
             dotnet.Exec("--roll-forward-on-no-candidate-fx", "1", appDll)
                 .WorkingDirectory(_currentWorkingDir)
-                .WithUserProfile(_userDir)
-                .EnvironmentVariable("COREHOST_TRACE", "1")
-                .CaptureStdOut()
-                .CaptureStdErr()
-                .Execute()
-                .Should()
-                .Pass()
-                .And
-                .HaveStdErrContaining(_userSelectedMessage);
-
-            // Set desired version = 9999.0.0
-            // Enable 'roll forward on no candidate fx' through Runtimeconfig
-            SetRuntimeConfigJson(runtimeConfig, "9999.0.0", 1);
-
-            // Version: 9999.0.0
-            // 'Roll forward on no candidate fx' disabled through argument
-            // User: 9999.1.0
-            // Exe: 9999.0.0
-            // Expected: 9999.0.0 from exe dir
-            dotnet.Exec("--roll-forward-on-no-candidate-fx", "0", appDll)
-                .WorkingDirectory(_currentWorkingDir)
-                .WithUserProfile(_userDir)
-                .EnvironmentVariable("DOTNET_ROLL_FORWARD_ON_NO_CANDIDATE_FX", "1")
+                 .WithGlobalLocation(_globalDir)
                 .EnvironmentVariable("COREHOST_TRACE", "1")
                 .CaptureStdOut()
                 .CaptureStdErr()
@@ -520,6 +536,28 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
                 .Pass()
                 .And
                 .HaveStdErrContaining(_exeSelectedMessage);
+
+            // Set desired version = 9999.0.0
+            // Enable 'roll forward on no candidate fx' through Runtimeconfig
+            SetRuntimeConfigJson(runtimeConfig, "9999.0.0", 1);
+
+            // Version: 9999.0.0
+            // 'Roll forward on no candidate fx' disabled through argument
+            // Exe: 9999.1.0
+            // Global: 9999.0.0
+            // Expected: 9999.0.0 from Global dir
+            dotnet.Exec("--roll-forward-on-no-candidate-fx", "0", appDll)
+                .WorkingDirectory(_currentWorkingDir)
+                .WithGlobalLocation(_globalDir)
+                .EnvironmentVariable("DOTNET_ROLL_FORWARD_ON_NO_CANDIDATE_FX", "1")
+                .EnvironmentVariable("COREHOST_TRACE", "1")
+                .CaptureStdOut()
+                .CaptureStdErr()
+                .Execute()
+                .Should()
+                .Pass()
+                .And
+                .HaveStdErrContaining(_globalSelectedMessage);
         }
 
         // This method adds a list of new framework version folders in the specified
