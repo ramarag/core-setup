@@ -152,20 +152,22 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
                 .Pass()
                 .And
                 .HaveStdErrContaining(_exeSelectedMessage);
-
-            // Remove dummy folders from user dir
-            DeleteAvailableSharedFxVersions(_userSharedFxBaseDir, "9999.0.0");
         }
 
         [Fact]
         public void SharedFxLookup_Must_Roll_Forward_Before_Looking_Into_Another_Folder()
         {
+            if (RuntimeEnvironment.OperatingSystemPlatform == Platform.Windows)
+            {
+                return;
+            }
+
             var fixture = PreviouslyBuiltAndRestoredPortableTestProjectFixture
                 .Copy();
 
             var dotnet = fixture.BuiltDotnet;
             var appDll = fixture.TestProject.AppDll;
-
+            
             // Add some dummy versions
             AddAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.0.2", "9999.0.0-dummy2");
             AddAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.0.0");
@@ -268,6 +270,11 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
         [Fact]
         public void SharedFxLookup_Must_Not_Roll_Forward_If_Framework_Version_Is_Specified_Through_Argument()
         {
+            if (RuntimeEnvironment.OperatingSystemPlatform == Platform.Windows)
+            {
+                return;
+            }
+            
             var fixture = PreviouslyBuiltAndRestoredPortableTestProjectFixture
                 .Copy();
 
@@ -403,6 +410,11 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
         [Fact]
         public void Roll_Forward_On_No_Candidate_Fx_Must_Look_Into_All_Lookup_Folders()
         {
+            if (RuntimeEnvironment.OperatingSystemPlatform == Platform.Windows)
+            {
+                return;
+            }
+
             var fixture = PreviouslyBuiltAndRestoredPortableTestProjectFixture
                 .Copy();
 
@@ -457,12 +469,17 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
 
             // Remove dummy folders from user dir
             DeleteAvailableSharedFxVersions(_exeSharedFxBaseDir, "9999.1.1");
-             DeleteAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.1.0");
+            DeleteAvailableSharedFxVersions(_globalSharedFxBaseDir, "9999.1.0");
         }
 
         [Fact]
         public void Roll_Forward_On_No_Candidate_Fx_May_Be_Enabled_Through_Runtimeconfig_Json_File()
         {
+            if (RuntimeEnvironment.OperatingSystemPlatform == Platform.Windows)
+            {
+                return;
+            }
+
             var fixture = PreviouslyBuiltAndRestoredPortableTestProjectFixture
                 .Copy();
 
@@ -499,7 +516,7 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
                 .Should()
                 .Pass()
                 .And
-                .HaveStdErrContaining(_exeSelectedMessage);
+                .HaveStdErrContaining(_globalSelectedMessage);
         }
 
         [Fact]
@@ -536,6 +553,11 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.MultilevelSharedFxLooku
                 .Pass()
                 .And
                 .HaveStdErrContaining(_exeSelectedMessage);
+                
+            if (RuntimeEnvironment.OperatingSystemPlatform == Platform.Windows)
+            {
+                return;
+            }
 
             // Set desired version = 9999.0.0
             // Enable 'roll forward on no candidate fx' through Runtimeconfig
