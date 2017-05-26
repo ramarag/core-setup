@@ -114,6 +114,8 @@ The host will probe in the following order of precedence for `dotnet run` and ap
 + `runtimeOptions.additionalProbingPaths` (includes NuGet cache probe specified by the CLI for `dotnet run`)
 + Application `bin` directory
 
+**NOTE:**  `--additionalprobingpaths` can be passed template paths like below and the host will interpret `{arch}/{tfm}` appropriately to look for assets: 
+           `%USERPROFILE%\.dotnet\store\{arch}\{tfm}` or `$HOME/.dotnet/store/{arch}/{tfm}`
 ## dotnet publish
 
 Publish will be enhanced to support a filter profile file specified as xml. This file explicitly lists all asset packages that need to be trimmed out of the publish output. The following are examples of how various application types can be published.
