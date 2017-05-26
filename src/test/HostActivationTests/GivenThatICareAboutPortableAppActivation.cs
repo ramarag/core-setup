@@ -140,7 +140,7 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.PortableApp
                 File.Delete(destRuntimeDevConfig);
             }
 
-            var additionalProbingPath = store_path + "/{arch}/{tfm}";
+            var additionalProbingPath = store_path + "/|arch|/|tfm|";
 
             dotnet.Exec(
                     "exec",

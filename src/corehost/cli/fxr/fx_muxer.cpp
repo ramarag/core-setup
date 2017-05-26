@@ -842,9 +842,9 @@ void append_probe_realpath(const pal::string_t& path, std::vector<pal::string_t>
     else
     {
         //Check if we can extrapolate {arch}<DIR_SEPARATOR>{tfm} for probing stores
-        pal::string_t placeholder = _X("{arch}");
+        pal::string_t placeholder = _X("|arch|");
         placeholder.push_back(DIR_SEPARATOR);
-        placeholder.append(_X("{tfm}"));
+        placeholder.append(_X("|tfm|"));
         auto pos_placeholder = probe_path.find_last_of(placeholder);
 
         if (pos_placeholder != pal::string_t::npos)
@@ -858,6 +858,14 @@ void append_probe_realpath(const pal::string_t& path, std::vector<pal::string_t>
             {
                 realpaths->push_back(probe_path);
             }
+            else
+            {
+                trace::verbose(_X("Ignoring host interpreted additional probing path %s as it does not exist."),probe_path.c_str());
+            }
+        }
+        else
+        {
+            trace::verbose(_X("Ignoring additional probing path %s as it does not exist."),probe_path.c_str());
         }
     }
 }
